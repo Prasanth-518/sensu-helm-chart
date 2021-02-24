@@ -1,0 +1,97 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sensu-datastore
+  namespace: sensu-system
+  labels:
+    component: sensu-datastore
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: sensu-datastore
+  replicas: {{ .Values.etcd-cluster.replicas }}
+  selector:
+    matchLabels:  
+      app: sensu-datastore
+  template:
+    metadata:
+      name: sensu-datastore
+      labels: 
+        component: sensu-datastore
+        app: sensu-datastore
+    spec:
+      containers:
+        - name: etcd
+          image: {{ .Values.etcd-cluster.image }}
+          ports:
+            - containerPort: {{ .Values.etcd-cluster.ports.client }}
+              name: client
+            - containerPort: {{ .Values.etcd-cluster.ports.peer }}
+              name: peer
+          env:
+            - name: CLUSTER_SIZE
+              value: "3"
+            - name: SET_NAME
+              value: sensu-datastore
+          volumeMounts:
+            - name: sensu-etcd-data
+              mountPath: /var/run/etcd
+          command:  
+            - "/bin/sh"
+            - "-ecx"
+            - |
+              IP=$(hostname -i)
+              PEERS=""
+              for i in $(seq 0 $((${CLUSTER_SIZE} - 1))); do
+                PEERS="${PEERS}${PEERS:+,}${SET_NAME}-${i}=http://${SET_NAME}-${i}.sensu-datastore.sensu-system.svc.cluster.local:{{ .Values.etcd-cluster.ports.peer }}"
+              done
+              
+              #start etcd
+              exec etcd --name ${HOSTNAME} \
+                --listen-peer-urls http://0.0.0.0:{{ .Values.etcd-cluster.ports.peer }} \
+                --listen-client-urls http://0.0.0.0:{{ .Values.etcd-cluster.ports.client }} \
+                --advertise-client-urls http://sensu-datastore.sensu-system.svc.cluster.local:{{ .Values.etcd-cluster.ports.client }} \
+                --initial-advertise-peer-urls http://${HOSTNAME}.sensu-datastore.sensu-system.svc.cluster.local:{{ .Values.etcd-cluster.ports.peer }} \
+                --initial-cluster-token etcd-cluster-1 \
+                --initial-cluster ${PEERS} \
+                --initial-cluster-state new \
+                --data-dir /var/run/etcd/default.etcd \
+                --auto-compaction-mode revision \
+                --auto-compaction-retention 2 
+          resources:
+            requests:
+              memory: 500Mi
+              cpu: 1.0
+            limits:
+              memory: 1Gi
+              cpu: 2.0
+  volumeClaimTemplates:
+    - metadata:
+        name: sensu-etcd-data
+      spec:
+        storageClassName: default
+        accessModes:  
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Mi
+---
+apiVersion: v1
+kind: Service
+metadata: 
+  name: sensu-datastore
+  namespace: sensu-system
+  annotations:
+    service.alpha.kubermetes.io/tolorate-unready-endpoints: "true"
+spec:
+  selector:
+    component: sensu-datastore
+  ports:
+  - port: {{ .Values.etcd-cluster.ports.client }}
+    targetPort: {{ .Values.etcd-cluster.ports.client }}
+    name: etcd-client
+  - port: {{ .Values.etcd-cluster.ports.peer }}
+    targetPort: {{ .Values.etcd-cluster.ports.peer }}
+    name: etcd-peer
+  clusterIP: None

@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sensu-backend
+  namespace: sensu-system
+  labels:
+    app: sensu-backend
+spec:
+  selector:
+    matchLabels:
+      app: sensu-backend
+  serviceName: sensu
+  replicas: {{ .Values.sensu-backend.replicas }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: sensu-backend
+    spec:
+      # - name: sensu-asset-server-ca-cert
+      #   secret:
+      #     secretName: sensu-asset-server-ca-cert
+      #     defaultMode: 256
+      #     optional: true
+      containers:
+      - name: sensu-backend
+        image: {{ .Values.sensu-backend.image }}
+        env:
+        - name: SENSU_BACKEND_CLUSTER_ADMIN_USERNAME
+          value: admin
+        - name: SENSU_BACKEND_CLUSTER_ADMIN_PASSWORD
+          value: admin
+              # try to initialize etcd using environment variable?
+        command: [
+          "/opt/sensu/bin/sensu-backend" ,"start",
+          "--log-level=debug", 
+          "--etcd-advertise-client-urls=http://sensu-datastore.sensu-system.svc.cluster.local:2379",
+          "--no-embed-etcd"
+        ] 
+        ports:
+        - protocol: TCP
+          containerPort: {{ .Values.sensu-backend.ports.api }}
+        - protocol: TCP
+          containerPort: {{ .Values.sensu-backend.agent }}
+        - protocol: TCP
+          containerPort: {{ .Values.sensu-backend.ports.ui }}
+        resources:
+          requests:
+            memory: 500Mi
+            cpu: 1.0
+          limits:
+            memory: 1Gi
+            cpu: 2.0
+
+--- 
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensu-services
+  namespace: sensu-system
+  labels:
+    app: sensu-backend
+spec:
+  selector:
+    app: sensu-backend
+  type: NodePort
+  ports:
+  - name: sensu-api
+    protocol: TCP
+    port: {{ .Values.sensu-backend.ports.api }}
+    targetPort: {{ .Values.sensu-backend.ports.api }}
+  - name: sensu-transport
+    protocol: TCP
+    port: {{ .Values.sensu-backend.agent }}
+    targetPort: {{ .Values.sensu-backend.agent }}
+  - name: sensu-ui
+    protocol: TCP
+    port: {{ .Values.sensu-backend.ports.ui }}
+    targetPort: {{ .Values.sensu-backend.ports.ui }}

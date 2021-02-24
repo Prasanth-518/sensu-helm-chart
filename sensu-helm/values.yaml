@@ -1,0 +1,18 @@
+# Default values for sensu-helm.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+sensu-backend:
+  replicas: 3
+  image: sensu/sensu:latest
+  ports:
+    api: 8080
+    ui: 3000
+    agent: 8081
+
+etcd-cluster:
+  replicas: 3
+  image: quay.io/coreos/etcd:v3.3.25
+  ports:
+    client: 2379
+    peer: 2380

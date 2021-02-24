@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: sensu-ingress
+  namespace: sensu-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /(.*)
+            backend:
+              serviceName: sensu-services 
+              servicePort: {{ .Values.sensu-backend.ports.ui }}
+          # - path: /sensu/sensuctl/(.*)
+            # backend:
+              # serviceName: sensu-services
+              # servicePort: {{ .Values.sensu-backend.ports.api }}
+          # - path: /sensu/sensu-agent/(.*)
+            # backend:  
+              # serviceName: sensu-services
+              # servicePort: {{ .Values.sensu-backend.ports.agent }}
